@@ -2433,6 +2433,44 @@ class GlacierDirectory(object):
             v.long_name = 'temperature gradient'
             v[:] = grad
 
+    def write_glacier_evolution_file(self, time, area, volume, length,
+                                   time_unit='years',
+                                   file_name='glacier_evolution',
+                                   filesuffix=''):
+        """Creates a netCDF4 file with glacier length, area & volume.
+        """
+
+        # overwrite as default
+        fpath = self.get_filepath(file_name, filesuffix=filesuffix)
+        if os.path.exists(fpath):
+            os.remove(fpath)
+
+        with netCDF4.Dataset(fpath, 'w', format='NETCDF4') as nc:
+
+            nc.createDimension('time', None)
+
+            nc.author = 'OGGM'
+            nc.author_info = 'Open Global Glacier Model'
+
+            timev = nc.createVariable('time','i4',('time',))
+            timev.setncatts({'units': time_unit})
+            timev[:] = time
+
+            v = nc.createVariable('area', 'f4', ('time',), zlib=True)
+            v.units = 'km-2'
+            v.long_name = 'glacier area'
+            v[:] = area
+
+            v = nc.createVariable('volume', 'f4', ('time',), zlib=True)
+            v.units = 'km-3'
+            v.long_name = 'glacier volume'
+            v[:] = volume
+
+            v = nc.createVariable('length', 'f4', ('time',), zlib=True)
+            v.units = 'km'
+            v.long_name = 'glacier length'
+            v[:] = length/1000
+
     def get_inversion_flowline_hw(self, div_id=None):
         """ Shortcut function to read the heights and widths of the glacier.
 

@@ -157,6 +157,15 @@ def process_cesm_data(gdir, filesuffix=''):
         append a suffix to the filename (useful for model runs).
     """
 
+    cfg.PATHS['gcm_temp_file'] = os.path.join(
+        cfg.PATHS['gcm_dir'], ''.join([filesuffix, cfg.PARAMS['temp_suffix']]))
+    cfg.PATHS['gcm_precc_file'] = os.path.join(
+        cfg.PATHS['gcm_dir'], ''.join([filesuffix,
+                                       cfg.PARAMS['precc_suffix']]))
+    cfg.PATHS['gcm_precl_file'] = os.path.join(
+        cfg.PATHS['gcm_dir'], ''.join([filesuffix,
+                                       cfg.PARAMS['precl_suffix']]))
+
     # GCM temperature and precipitation data
     if not (('gcm_temp_file' in cfg.PATHS) and
                     os.path.exists(cfg.PATHS['gcm_temp_file'])):

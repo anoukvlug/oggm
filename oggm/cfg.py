@@ -220,6 +220,9 @@ _doc = 'Array of the parabolic coefficients for all centerlines, computed ' \
        'from fitting a parabola to the topography.'
 BASENAMES['downstream_bed'] = ('downstream_bed.pkl', _doc)
 
+_doc = 'Glacier evolution data is stored in this file'
+BASENAMES['glacier_evolution'] = ('glacier_evolution.nc', _doc)
+
 
 def initialize(file=None):
     """Read the configuration file containing the run's parameters."""

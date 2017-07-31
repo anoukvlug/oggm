@@ -1644,3 +1644,68 @@ def iterative_initial_glacier_search(gdir, y0=None, init_bias=0., rtol=0.005,
         _ = past_model.run_until_and_store(y1, path=path)
     else:
         past_model.to_netcdf(path)
+
+@entity_task(log)
+def glacier_evolution(gdir, filename='cesm_data', filesuffix='', **kwargs):
+    """Random glacier dynamics for benchmarking purposes.
+
+     This runs the random mass-balance model for a certain number of years.
+
+     Parameters
+     ----------
+     nyears : length of the simulation
+     y0 : central year of the random climate period
+     filesuffix : for the output file
+     kwargs : kwargs to pass to the FluxBasedModel instance
+     """
+
+    if cfg.PARAMS['use_optimized_inversion_params']:
+        d = gdir.read_pickle('inversion_params')
+        fs = d['fs']
+        glen_a = d['glen_a']
+    else:
+        fs = cfg.PARAMS['flowline_fs']
+        glen_a = cfg.PARAMS['flowline_glen_a']
+
+    kwargs.setdefault('fs', fs)
+    kwargs.setdefault('glen_a', glen_a)
+    volume = np.array([])
+    area = ([])
+    length = np.array([])
+    y0 = cfg.PARAMS['y0']
+    nyears = cfg.PARAMS['nyears']
+    years = np.arange(nyears) + y0
+
+    mb_model = oggm.core.models.massbalance.\
+        PastMassBalanceModel(gdir, filename=filename, filesuffix=filesuffix)
+
+    # steps = ['ambitious', 'default', 'conservative', 'ultra-conservative']
+    steps = ['default', 'conservative', 'ultra-conservative']
+    for step in steps:
+        log.info('%s: trying %s time stepping scheme.', gdir.rgi_id,
+                 step)
+        fls = gdir.read_pickle('model_flowlines')
+        model = FluxBasedModel(fls, mb_model=mb_model, y0=y0,
+                               time_stepping=step,
+                               **kwargs)
+        try:
+            for y in years:
+                model.run_until(y)
+                volume = np.append(volume, model.volume_km3)
+                area = np.append(area, model.area_km2)
+                length = np.append(length, model.length_m)
+            gdir.write_glacier_evolution_file(time=years, area=area,
+                                              volume=volume,
+                                              length=length,
+                                              filesuffix=filesuffix)
+        except RuntimeError:
+            if step == 'ultra-conservative':
+                raise RuntimeError(
+                    '%s: we did our best, the model is still '
+                    'unstable.', gdir.rgi_id)
+            continue
+        # If we get here we good
+        log.info('%s: %s time stepping was successful!', gdir.rgi_id,
+                 step)
+        break
+
