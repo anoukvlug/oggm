@@ -8,8 +8,8 @@ Mass-balance
 The mass-balance (MB) model implemented in OGGM is an extended version of the
 temperature index model presented by `Marzeion et al., (2012)`_.
 While the equation governing the mass-balance is that of a traditional
-temperature index model, our approach to calibration requires that we spend
-some time describing it.
+temperature index model, our special approach to calibration requires
+that we spend some time describing it.
 
 .. _Marzeion et al., (2012): http://www.the-cryosphere.net/6/1295/2012/tc-6-1295-2012.html
 
@@ -22,15 +22,14 @@ some time describing it.
         exec(code)
 
 
-
 Climate data
 ------------
 
 The MB model implemented in OGGM needs monthly time series of temperature and
-precipitation. The current default is to download and use the `CRU TS v3.24`_
+precipitation. The current default is to download and use the `CRU TS`_
 data provided by the Climatic Research Unit of the University of East Anglia.
 
-.. _CRU TS v3.24: https://crudata.uea.ac.uk/cru/data/hrg/
+.. _CRU TS: https://crudata.uea.ac.uk/cru/data/hrg/
 
 
 CRU (default)
@@ -48,21 +47,25 @@ The raw, coarse (0.5°) dataset is then downscaled to a higher resolution grid
 (CRU CL v2.0 at 10' resolution) following the anomaly mapping approach
 described by Tim Mitchell in his `CRU faq`_ (Q25). Note that we don't expect
 this downscaling to add any new information than already available at the
-original resolution, but this allows us to have an elevation-dependent dataset,
-from which we can compute the temperature at the elevation of the glacier.
+original resolution, but this allows us to have an elevation-dependent dataset
+based on a presumably better climatology. The monthly anomalies are computed
+following [Harris_etal_2010]_ : we use standard anomalies for temperature and
+scaled (fractional) anomalies for precipitation.
 
 .. _CRU faq: https://crudata.uea.ac.uk/~timm/grid/faq.html
 
+HISTALP
+~~~~~~~
 
-User-provided dataset
-~~~~~~~~~~~~~~~~~~~~~
+If required by the user, OGGM can also automatically
+download and use the data from the `HISTALP`_ dataset.
 
-You can provide any other dataset to OGGM by setting the ``climate_file``
-parameter in ``params.cfg``. See the HISTALP data file in the `sample-data`_
-folder for an example.
+.. _HISTALP: http://www.zamg.ac.at/histalp/
 
-.. _sample-data: https://github.com/OGGM/oggm-sample-data/tree/master/test-workflow
-
+The data is available at 5' resolution (about 0.0833°) from 1801 to 2014.
+However, the data is considered spurious before 1850. Therefore, we
+recommend to use data from 1850 onwards. This can be done by setting
+``cfg.PARAMS['baseline_y0'] = 1850``.
 
 .. ipython:: python
 
@@ -70,22 +73,42 @@ folder for an example.
     example_plot_temp_ts()  # the code for these examples is posted below
 
 
+
+User-provided dataset
+~~~~~~~~~~~~~~~~~~~~~
+
+You can provide any other dataset to OGGM. See the `HISTALP_oetztal.nc` data
+file in the OGGM `sample-data`_ folder for an example format.
+
+.. _sample-data: https://github.com/OGGM/oggm-sample-data/tree/master/test-workflow
+
+
+GCM data
+~~~~~~~~
+
+OGGM can also use climate model output to drive the mass-balance model. In
+this case we still rely on gridded observations (CRU) for the baseline
+climatology and apply the GCM anomalies computed from a preselected reference
+period (currently: 1961-1990). This method is often called the
+`delta method <http://www.ciesin.org/documents/Downscaling_CLEARED_000.pdf>`_.
+
+Currently we can process data from the
+`CESM Last Millenium Ensemble <http://www.cesm.ucar.edu/projects/community-projects/LME/>`_
+project (see :py:func:`tasks.process_cesm_data`) only, but adding other models
+will be available `soon <https://github.com/OGGM/oggm/issues/469>`_.
+
+
 Elevation dependency
 ~~~~~~~~~~~~~~~~~~~~
 
-OGGM finally needs to compute the temperature and precipitation at the altitude
+OGGM needs to compute the temperature and precipitation at the altitude
 of the glacier grid points. The default is to use a fixed gradient of
 -6.5K km :math:`^{-1}` and no gradient for precipitation. However, OGGM
-implements a module which computes the local gradient by linear
+also implements an optional algorithm which computes the local gradient by linear
 regression of the 9 surrounding grid points. This method requires that the
 near-surface temperature lapse-rates provided by the climate dataset are good
-(in most of the cases you should probably use a fixed gradient).
-The default config parameters are:
-
-.. ipython:: python
-
-    cfg.PARAMS['temp_use_local_gradient']  # use the regression method?
-    cfg.PARAMS['temp_default_gradient']  # constant gradiant
+(i.e.: in most of the cases, you should probably use the simple fixed gradient
+instead).
 
 
 Temperature index model
@@ -164,12 +187,14 @@ with the expected mass-balance and compute the model bias:
     example_plot_bias_ts()  # the code for these examples is posted below
 
 The bias is positive when :math:`\mu` is too low, and negative when :math:`\mu`
-is too high. The vertical dashed lines mark the times where the bias is
-closest to zero. They all correspond to approximately the same :math:`\mu` (but
-not exactly, as precipitation and temperature both influence :math:`\mu`).
+is too high. Here, the bias crosses the zero line twice. All dates
+correspond to approximately the same :math:`\mu` (but not exactly,
+as precipitation and temperature both have an influence on it).
 These dates at which the :math:`\mu` candidates
-are close to the real :math:`\mu` are called :math:`t^*` (the associated sensitivities
-:math:`\mu (t^*)` are called :math:`\mu^*`).
+are close to the real :math:`\mu` are called :math:`t^*`
+(the associated sensitivities :math:`\mu (t^*)` are called :math:`\mu^*`).
+For the next step, one :math:`t^*` is sufficient: we pick the one which
+corresponds to the smallest absolute bias.
 
 At the glaciers where observations are available, this detour via the :math:`\mu`
 candidates is not necessary to find the correct :math:`\mu^*`. Indeed, the goal
@@ -179,14 +204,14 @@ value to be interpolated to glaciers where no observations are available**.
 The benefit of this approach is best shown with the results of a cross-validation
 study realized by `Marzeion et al., (2012)`_ (and confirmed by OGGM):
 
-.. figure:: _static/marzeion_mus.png
+.. figure:: _static/mb_crossval_panel.png
     :width: 100%
 
-    Benefit of spatially interpolating :math:`t^*` instead of :math:`\mu^*`;
-    (a) error distribution of :math:`\mu^*` if determined as the mean of
-    :math:`\mu^*` of all other glaciers with mass balance measurements in the
-    respective region; (b) error distribution of :math:`\mu^*` if determined
-    by interpolation of :math:`t^*`. Source: `Marzeion et al., (2012)`_.
+    Benefit of spatially interpolating :math:`t^{*}` instead of :math:`\mu ^{*}` as shown
+    by leave-one-glacier-out cross-validation (N = 255). **Left**: error
+    distribution of the computed mass-balance if determined by the
+    interpolated :math:`t^{*}`. **Right**: error distribution of the mass-balance
+    if determined by interpolation of :math:`\mu ^{*}`.
 
 This substantial improvement in model performance is due to several factors:
 
@@ -227,6 +252,13 @@ resulting changes in calibrated :math:`\mu^*` will be comparatively small
 (again, because of the local constraints on :math:`\mu`). The MB observations,
 however, play a major role for the assessment of model uncertainty.
 
+References
+----------
+
+.. [Harris_etal_2010] Harris, I., Jones, P. D., Osborn, T. J., & Lister,
+   D. H. (2014). Updated high-resolution grids of monthly climatic observations
+   - the CRU TS3.10 Dataset. International Journal of Climatology, 34(3),
+   623–642. https://doi.org/10.1002/joc.3711
 
 Implementation details
 ----------------------
@@ -238,9 +270,9 @@ Here are some more details:
 - the mass-balance in OGGM is computed from the altitudes and widths
   of the flowlines grid points (see :ref:`flowlines`). The easiest way to let
   OGGM compute the mass-balance for you is to use the
-  :py:class:`core.models.massbalance.PastMassBalanceModel`.
+  :py:class:`core.massbalance.PastMassBalance`.
 - the interpolation of :math:`t^*` is done with an inverse distance weighting
-  algorithm (see :py:func:`tasks.distribute_t_stars`)
+  algorithm (see :py:func:`tasks.local_t_star`)
 - if more than one :math:`t^*` is found for some reference glaciers, than the
   glaciers with only one :math:`t^*` will determine the most likely :math:`t^*`
   for the other glaciers (see :py:func:`tasks.compute_ref_t_stars`)
@@ -248,11 +280,6 @@ Here are some more details:
   an influence on the results, but it is small since any change will automatically
   be compensated by :math:`\mu^*`. We are currently quantifying these effects
   more precisely.
-- the cross-validation procedure is done systematically
-  (:py:func:`tasks.crossval_t_stars`). Currently, this cross-validation is done
-  with fixed geometry (it will be extended to a full validation
-  with the dynamical model at a later stage).
-
 
 Code used to generate these examples:
 

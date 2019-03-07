@@ -1,51 +1,48 @@
-from __future__ import division
-
-import unittest
 import warnings
-
-warnings.filterwarnings("once", category=DeprecationWarning)
-warnings.filterwarnings("ignore", category=UserWarning,
-                        message=r'.*guessing baseline image.*')
 
 import pytest
 import shutil
 
 import os
 import geopandas as gpd
-import numpy as np
 import matplotlib.pyplot as plt
 
 # Local imports
 import oggm.utils
-from oggm.tests import requires_mpltest, requires_internet, RUN_GRAPHIC_TESTS
-from oggm.tests import init_hef, BASELINE_DIR
+from oggm.tests import mpl_image_compare
+from oggm.tests.funcs import init_hef, get_test_dir, patch_url_retrieve_github
 from oggm import graphics
-from oggm.core.preprocessing import (gis, centerlines, geometry, climate, inversion)
+from oggm.core import (gis, inversion, climate, centerlines, flowline,
+                       massbalance)
 import oggm.cfg as cfg
 from oggm.utils import get_demo_file
-from oggm.core.models import flowline, massbalance
-from oggm import utils
+from oggm import utils, workflow
 
-# In case some logging happens or so
-cfg.PATHS['working_dir'] = cfg.PATHS['test_dir']
-
-# do we event want to run the tests?
-if not RUN_GRAPHIC_TESTS:
-    raise unittest.SkipTest('Skipping all graphic tests.')
+# Warnings
+warnings.filterwarnings("once", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=UserWarning,
+                        message=r'.*guessing baseline image.*')
 
 # Globals
+pytestmark = pytest.mark.test_env("graphics")
+_url_retrieve = None
+
+
+def setup_module(module):
+    module._url_retrieve = utils.oggm_urlretrieve
+    oggm.utils._downloads.oggm_urlretrieve = patch_url_retrieve_github
+
+
+def teardown_module(module):
+    oggm.utils._downloads.oggm_urlretrieve = module._url_retrieve
 
 # ----------------------------------------------------------
 # Lets go
 
-# TODO: temporary tolerance
-TOLERANCE=20
-BIG_TOLERANCE=32
 
-
-@requires_internet
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.internet
+@pytest.mark.graphic
+@mpl_image_compare()
 def test_googlemap():
     fig, ax = plt.subplots()
     gdir = init_hef()
@@ -54,9 +51,9 @@ def test_googlemap():
     return fig
 
 
-@requires_internet
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.internet
+@pytest.mark.graphic
+@mpl_image_compare()
 def test_domain():
     fig, ax = plt.subplots()
     gdir = init_hef()
@@ -65,8 +62,8 @@ def test_domain():
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.graphic
+@mpl_image_compare()
 def test_centerlines():
     fig, ax = plt.subplots()
     gdir = init_hef()
@@ -75,8 +72,8 @@ def test_centerlines():
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.graphic
+@mpl_image_compare()
 def test_flowlines():
     fig, ax = plt.subplots()
     gdir = init_hef()
@@ -85,18 +82,8 @@ def test_flowlines():
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
-def test_downstream_cls():
-    fig, ax = plt.subplots()
-    gdir = init_hef()
-    graphics.plot_centerlines(gdir, ax=ax, add_downstream=True)
-    fig.tight_layout()
-    return fig
-
-
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.graphic
+@mpl_image_compare()
 def test_downstream():
     fig, ax = plt.subplots()
     gdir = init_hef()
@@ -106,8 +93,8 @@ def test_downstream():
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.graphic
+@mpl_image_compare()
 def test_width():
     fig, ax = plt.subplots()
     gdir = init_hef()
@@ -116,18 +103,20 @@ def test_width():
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.graphic
+@mpl_image_compare()
 def test_width_corrected():
     fig, ax = plt.subplots()
     gdir = init_hef()
-    graphics.plot_catchment_width(gdir, ax=ax, corrected=True)
+    graphics.plot_catchment_width(gdir, ax=ax, corrected=True,
+                                  add_intersects=True,
+                                  add_touches=True)
     fig.tight_layout()
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.graphic
+@mpl_image_compare()
 def test_inversion():
     fig, ax = plt.subplots()
     gdir = init_hef()
@@ -136,78 +125,43 @@ def test_inversion():
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
-def test_nodivide():
+@pytest.mark.graphic
+@mpl_image_compare()
+def test_multiple_inversion():
 
     # test directory
-    testdir = os.path.join(cfg.PATHS['test_dir'], 'tmp_nodiv')
+    testdir = os.path.join(get_test_dir(), 'tmp_mdir')
     if not os.path.exists(testdir):
         os.makedirs(testdir)
 
     # Init
     cfg.initialize()
-    cfg.set_divides_db()
+    cfg.set_intersects_db(get_demo_file('rgi_intersect_oetztal.shp'))
     cfg.PATHS['dem_file'] = get_demo_file('hef_srtm.tif')
     cfg.PATHS['climate_file'] = get_demo_file('histalp_merged_hef.nc')
     cfg.PARAMS['border'] = 40
+    cfg.PARAMS['run_mb_calibration'] = True
+    cfg.PARAMS['baseline_climate'] = 'CUSTOM'
+    cfg.PATHS['working_dir'] = testdir
 
-    hef_file = get_demo_file('Hintereisferner.shp')
-    entity = gpd.GeoDataFrame.from_file(hef_file).iloc[0]
-    gdir = oggm.GlacierDirectory(entity, base_dir=testdir, reset=True)
+    # Get the RGI ID
+    hef_rgi = gpd.read_file(get_demo_file('divides_hef.shp'))
+    hef_rgi.loc[0, 'RGIId'] = 'RGI50-11.00897'
 
-    gis.define_glacier_region(gdir, entity=entity)
-    gis.glacier_masks(gdir)
-    centerlines.compute_centerlines(gdir)
+    gdirs = workflow.init_glacier_regions(hef_rgi)
+    workflow.gis_prepro_tasks(gdirs)
+    workflow.climate_tasks(gdirs)
+    workflow.inversion_tasks(gdirs)
 
     fig, ax = plt.subplots()
-    graphics.plot_centerlines(gdir, ax=ax)
+    graphics.plot_inversion(gdirs, ax=ax)
     fig.tight_layout()
-
     shutil.rmtree(testdir)
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
-def test_nodivide_corrected():
-
-    # test directory
-    testdir = os.path.join(cfg.PATHS['test_dir'], 'tmp_nodiv')
-    if not os.path.exists(testdir):
-        os.makedirs(testdir)
-
-    # Init
-    cfg.initialize()
-    cfg.set_divides_db()
-    cfg.PATHS['dem_file'] = get_demo_file('hef_srtm.tif')
-    cfg.PATHS['climate_file'] = get_demo_file('histalp_merged_hef.nc')
-    cfg.PARAMS['border'] = 40
-
-    hef_file = get_demo_file('Hintereisferner_RGI5.shp')
-    entity = gpd.GeoDataFrame.from_file(hef_file).iloc[0]
-    gdir = oggm.GlacierDirectory(entity, base_dir=testdir, reset=True)
-
-    gis.define_glacier_region(gdir, entity=entity)
-    gis.glacier_masks(gdir)
-    centerlines.compute_centerlines(gdir)
-    geometry.initialize_flowlines(gdir)
-    geometry.catchment_area(gdir)
-    geometry.catchment_intersections(gdir)
-    geometry.catchment_width_geom(gdir)
-    geometry.catchment_width_correction(gdir)
-
-    fig, ax = plt.subplots()
-    graphics.plot_catchment_width(gdir, ax=ax, corrected=True,
-                                  add_intersects=True, add_touches=True)
-    fig.tight_layout()
-
-    shutil.rmtree(testdir)
-    return fig
-
-
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.graphic
+@mpl_image_compare()
 def test_modelsection():
 
     gdir = init_hef()
@@ -217,12 +171,12 @@ def test_modelsection():
 
     fig = plt.figure(figsize=(12, 6))
     ax = fig.add_axes([0.07, 0.08, 0.7, 0.84])
-    graphics.plot_modeloutput_section(gdir, ax=ax, model=model)
+    graphics.plot_modeloutput_section(ax=ax, model=model)
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.graphic
+@mpl_image_compare()
 def test_modelsection_withtrib():
 
     gdir = init_hef()
@@ -231,14 +185,13 @@ def test_modelsection_withtrib():
     model = flowline.FlowlineModel(fls)
 
     fig = plt.figure(figsize=(14, 10))
-    graphics.plot_modeloutput_section_withtrib(gdir, fig=fig, model=model)
+    graphics.plot_modeloutput_section_withtrib(fig=fig, model=model)
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR,
-                               tolerance=BIG_TOLERANCE)
-def test_modelmap():
+@pytest.mark.graphic
+@mpl_image_compare()
+def test_modeloutput_map():
 
     gdir = init_hef()
     flowline.init_present_time_glacier(gdir)
@@ -251,28 +204,71 @@ def test_modelmap():
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.graphic
+@mpl_image_compare()
+def test_multiple_models():
+
+    # test directory
+    testdir = os.path.join(get_test_dir(), 'tmp_mdir')
+    utils.mkdir(testdir, reset=True)
+
+    # Init
+    cfg.initialize()
+    cfg.set_intersects_db(get_demo_file('rgi_intersect_oetztal.shp'))
+    cfg.PATHS['dem_file'] = get_demo_file('hef_srtm.tif')
+    cfg.PATHS['climate_file'] = get_demo_file('histalp_merged_hef.nc')
+    cfg.PATHS['working_dir'] = testdir
+    cfg.PARAMS['baseline_climate'] = 'CUSTOM'
+    cfg.PARAMS['run_mb_calibration'] = True
+    cfg.PARAMS['border'] = 40
+
+    # Get the RGI ID
+    hef_rgi = gpd.read_file(get_demo_file('divides_hef.shp'))
+    hef_rgi.loc[0, 'RGIId'] = 'RGI50-11.00897'
+
+    gdirs = workflow.init_glacier_regions(hef_rgi)
+    workflow.gis_prepro_tasks(gdirs)
+    workflow.climate_tasks(gdirs)
+    workflow.inversion_tasks(gdirs)
+
+    models = []
+    for gdir in gdirs:
+        flowline.init_present_time_glacier(gdir)
+        fls = gdir.read_pickle('model_flowlines')
+        models.append(flowline.FlowlineModel(fls))
+
+    fig, ax = plt.subplots()
+    graphics.plot_modeloutput_map(gdirs, ax=ax, model=models)
+    fig.tight_layout()
+
+    shutil.rmtree(testdir)
+    return fig
+
+
+@pytest.mark.graphic
+@mpl_image_compare()
 def test_thick_alt():
     fig, ax = plt.subplots()
     gdir = init_hef()
-    graphics.plot_distributed_thickness(gdir, ax=ax, how='per_altitude')
+    graphics.plot_distributed_thickness(gdir, ax=ax,
+                                        varname_suffix='_alt')
     fig.tight_layout()
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.graphic
+@mpl_image_compare(multi=True)
 def test_thick_interp():
     fig, ax = plt.subplots()
     gdir = init_hef()
-    graphics.plot_distributed_thickness(gdir, ax=ax, how='per_interpolation')
+    graphics.plot_distributed_thickness(gdir, ax=ax,
+                                        varname_suffix='_interp')
     fig.tight_layout()
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.graphic
+@mpl_image_compare()
 def test_catch_areas():
     fig, ax = plt.subplots()
     gdir = init_hef()
@@ -281,141 +277,112 @@ def test_catch_areas():
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
-def test_intersects_borders():
-    fig, ax = plt.subplots()
-    gdir = init_hef()
-    graphics.plot_catchment_width(gdir, ax=ax, add_intersects=True,
-                                  add_touches=True)
-    fig.tight_layout()
-    return fig
-
-
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.graphic
+@mpl_image_compare()
 def test_chhota_shigri():
 
-    testdir = os.path.join(cfg.PATHS['test_dir'], 'tmp_chhota')
-    utils.mkdir(testdir)
+    testdir = os.path.join(get_test_dir(), 'tmp_chhota')
+    utils.mkdir(testdir, reset=True)
 
     # Init
     cfg.initialize()
     cfg.PATHS['dem_file'] = get_demo_file('dem_chhota_shigri.tif')
-    cfg.PARAMS['border'] = 60
-    cfg.set_divides_db(get_demo_file('divides_RGI50-14.15990.shp'))
+    cfg.PARAMS['border'] = 80
+    cfg.PARAMS['use_intersects'] = False
+    cfg.PATHS['working_dir'] = testdir
 
-    hef_file = get_demo_file('RGI50-14.15990.shp')
-    entity = gpd.GeoDataFrame.from_file(hef_file).iloc[0]
+    hef_file = get_demo_file('divides_RGI50-14.15990.shp')
+    df = gpd.read_file(hef_file)
+    df['Area'] = df.Area * 1e-6  # cause it was in m2
+    df['RGIId'] = ['RGI50-14.15990' + d for d in ['_d01', '_d02']]
 
-    gdir = oggm.GlacierDirectory(entity, base_dir=testdir)
-    gis.define_glacier_region(gdir, entity=entity)
-    gis.glacier_masks(gdir)
-    centerlines.compute_centerlines(gdir)
-    centerlines.compute_downstream_lines(gdir)
-    geometry.initialize_flowlines(gdir)
+    gdirs = workflow.init_glacier_regions(df)
+    workflow.gis_prepro_tasks(gdirs)
+    for gdir in gdirs:
+        climate.apparent_mb_from_linear_mb(gdir)
+    workflow.execute_entity_task(inversion.prepare_for_inversion, gdirs)
+    workflow.execute_entity_task(inversion.mass_conservation_inversion, gdirs)
+    workflow.execute_entity_task(inversion.filter_inversion_output, gdirs)
+    workflow.execute_entity_task(flowline.init_present_time_glacier, gdirs)
 
-    # We should have two groups
-    lines = gdir.read_pickle('downstream_lines', div_id=0)
-    assert len(np.unique(lines.group)) == 2
-
-    # Just check if the rest runs
-    centerlines.compute_downstream_bedshape(gdir)
-    geometry.catchment_area(gdir)
-    geometry.catchment_intersections(gdir)
-    geometry.catchment_width_geom(gdir)
-    geometry.catchment_width_correction(gdir)
-    climate.apparent_mb_from_linear_mb(gdir)
-    inversion.prepare_for_inversion(gdir)
-    inversion.volume_inversion(gdir, use_cfg_params={'glen_a': cfg.A,
-                                                     'fs': 0})
-    inversion.filter_inversion_output(gdir)
-
-    flowline.init_present_time_glacier(gdir)
-
-    fls = gdir.read_pickle('model_flowlines')
-    for fl in fls:
-        fl.thick = np.clip(fl.thick, 100, 1000)
-    model = flowline.FlowlineModel(fls)
+    models = []
+    for gdir in gdirs:
+        flowline.init_present_time_glacier(gdir)
+        fls = gdir.read_pickle('model_flowlines')
+        models.append(flowline.FlowlineModel(fls))
 
     fig, ax = plt.subplots()
-    graphics.plot_modeloutput_map(gdir, ax=ax, model=model)
+    graphics.plot_modeloutput_map(gdirs, ax=ax, model=models)
     fig.tight_layout()
+    shutil.rmtree(testdir)
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.graphic
+@mpl_image_compare()
 def test_ice_cap():
 
-    testdir = os.path.join(cfg.PATHS['test_dir'], 'tmp_icecap')
-    utils.mkdir(testdir)
+    testdir = os.path.join(get_test_dir(), 'tmp_icecap')
+    utils.mkdir(testdir, reset=True)
 
     cfg.initialize()
+    cfg.PARAMS['use_intersects'] = False
     cfg.PATHS['dem_file'] = get_demo_file('dem_RGI50-05.08389.tif')
-    cfg.PARAMS['border'] = 20
-    cfg.set_divides_db(get_demo_file('divides_RGI50-05.08389.shp'))
+    cfg.PARAMS['border'] = 60
+    cfg.PATHS['working_dir'] = testdir
 
-    hef_file = get_demo_file('RGI50-05.08389.shp')
-    entity = gpd.GeoDataFrame.from_file(hef_file).iloc[0]
+    df = gpd.read_file(get_demo_file('divides_RGI50-05.08389.shp'))
+    df['Area'] = df.Area * 1e-6  # cause it was in m2
+    df['RGIId'] = ['RGI50-05.08389_d{:02d}'.format(d+1) for d in df.index]
 
-    gdir = oggm.GlacierDirectory(entity, base_dir=testdir, reset=True)
-    gis.define_glacier_region(gdir, entity=entity)
-    gis.glacier_masks(gdir)
-    centerlines.compute_centerlines(gdir)
-    centerlines.compute_downstream_lines(gdir)
-    geometry.initialize_flowlines(gdir)
+    gdirs = workflow.init_glacier_regions(df)
+    workflow.gis_prepro_tasks(gdirs)
 
-    # We should have five groups
-    lines = gdir.read_pickle('downstream_lines', div_id=0)
-    assert len(np.unique(lines.group))==5
-
-    # This just checks that it works
-    geometry.catchment_area(gdir)
-    geometry.catchment_intersections(gdir)
-    geometry.catchment_width_geom(gdir)
-    geometry.catchment_width_correction(gdir)
+    from salem import mercator_grid, Map
+    smap = mercator_grid((gdirs[0].cenlon, gdirs[0].cenlat),
+                         extent=[20000, 23000])
+    smap = Map(smap)
 
     fig, ax = plt.subplots()
-    graphics.plot_catchment_width(gdir, ax=ax, add_intersects=True,
-                                  add_touches=True)
+    graphics.plot_catchment_width(gdirs, ax=ax, add_intersects=True,
+                                  add_touches=True, smap=smap)
     fig.tight_layout()
+    shutil.rmtree(testdir)
     return fig
 
 
-@requires_mpltest
-@pytest.mark.mpl_image_compare(baseline_dir=BASELINE_DIR, tolerance=TOLERANCE)
+@pytest.mark.graphic
+@mpl_image_compare(multi=True)
 def test_coxe():
 
-    testdir = os.path.join(cfg.PATHS['test_dir'], 'tmp_coxe')
-    utils.mkdir(testdir)
+    testdir = os.path.join(get_test_dir(), 'tmp_coxe')
+    utils.mkdir(testdir, reset=True)
 
     # Init
     cfg.initialize()
+    cfg.PARAMS['use_intersects'] = False
     cfg.PATHS['dem_file'] = get_demo_file('dem_RGI50-01.10299.tif')
     cfg.PARAMS['border'] = 40
+    cfg.PARAMS['clip_tidewater_border'] = False
     cfg.PARAMS['use_multiple_flowlines'] = False
 
     hef_file = get_demo_file('rgi_RGI50-01.10299.shp')
-    entity = gpd.GeoDataFrame.from_file(hef_file).iloc[0]
+    entity = gpd.read_file(hef_file).iloc[0]
 
     gdir = oggm.GlacierDirectory(entity, base_dir=testdir, reset=True)
     gis.define_glacier_region(gdir, entity=entity)
     gis.glacier_masks(gdir)
     centerlines.compute_centerlines(gdir)
-    centerlines.compute_downstream_lines(gdir)
-    geometry.initialize_flowlines(gdir)
-
-    # Just check if the rest runs
+    centerlines.initialize_flowlines(gdir)
+    centerlines.compute_downstream_line(gdir)
     centerlines.compute_downstream_bedshape(gdir)
-    geometry.catchment_area(gdir)
-    geometry.catchment_intersections(gdir)
-    geometry.catchment_width_geom(gdir)
-    geometry.catchment_width_correction(gdir)
+    centerlines.catchment_area(gdir)
+    centerlines.catchment_intersections(gdir)
+    centerlines.catchment_width_geom(gdir)
+    centerlines.catchment_width_correction(gdir)
     climate.apparent_mb_from_linear_mb(gdir)
     inversion.prepare_for_inversion(gdir)
-    inversion.volume_inversion(gdir, use_cfg_params={'glen_a': cfg.A,
-                                                     'fs': 0})
+    inversion.mass_conservation_inversion(gdir)
     inversion.filter_inversion_output(gdir)
 
     flowline.init_present_time_glacier(gdir)
@@ -423,10 +390,11 @@ def test_coxe():
     fls = gdir.read_pickle('model_flowlines')
 
     p = gdir.read_pickle('linear_mb_params')
-    mb_mod = massbalance.LinearMassBalanceModel(ela_h=p['ela_h'],
-                                                grad=p['grad'])
+    mb_mod = massbalance.LinearMassBalance(ela_h=p['ela_h'],
+                                           grad=p['grad'])
     mb_mod.temp_bias = -0.3
     model = flowline.FluxBasedModel(fls, mb_model=mb_mod, y0=0,
+                                    inplace=True,
                                     is_tidewater=True)
 
     # run
@@ -436,4 +404,5 @@ def test_coxe():
     fig, ax = plt.subplots()
     graphics.plot_modeloutput_map(gdir, ax=ax, model=model)
     fig.tight_layout()
+    shutil.rmtree(testdir)
     return fig

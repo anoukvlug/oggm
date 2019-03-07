@@ -102,8 +102,8 @@ Contributing to the code base
 Code standards
 --------------
 
-OGGM uses the `PEP8 <http://www.python.org/dev/peps/pep-0008/>`_ standard, as
-far as possible. There are several tools to ensure you abide by this standard,
+OGGM uses the `PEP8 <http://www.python.org/dev/peps/pep-0008/>`_ standard.
+There are several tools to ensure you abide by this standard,
 and some IDE (for example PyCharm) will warn you if you don't follow PEP8.
 
 Test-driven development/code writing
@@ -206,12 +206,17 @@ Requirements
 ~~~~~~~~~~~~
 
 There are some extra requirements to build the docs: you will need to
-have ``sphinx``, ``numpydoc`` and ``ipython`` installed.
+have ``sphinx``, ``sphinx_rtd_theme``, ``numpydoc`` and ``ipython`` installed.
 
-If you have a conda environment named ``oggm-env``, you can install the extra
+If you have a conda environment named ``oggm_env``, you can install the extra
 requirements with::
 
-      conda install -n oggm-env sphinx ipython numpydoc
+      conda install -n oggm_env sphinx sphinx_rtd_theme ipython numpydoc
+
+If you use pip, activate your python environment and install the requirements
+with::
+
+      pip install sphinx sphinx_rtd_theme ipython numpydoc
 
 
 Building the documentation

@@ -3,7 +3,7 @@ Bed inversion
 
 To compute the initial ice thickness :math:`h_0`, OGGM follows a methodology
 largely inspired from [Farinotti_etal_2009]_, but fully automatised and relying
-on different approaches to mass-balance and to calibration.
+on different methods for the mass-balance and the calibration.
 
 Basics
 ------
@@ -80,42 +80,27 @@ such as:
 
     A = f_{inv} \, A_0
 
-With :math:`A_0` the standard creep parameter (2.4e-24). Currently,
-:math:`f_{inv}` is calibrated to minimize the volume RMSD of all glaciers
-with a volume estimation in the `GlaThiDa`_ database. It is therefore
-neither glacier nor temperature dependent and does not account for
-uncertainties in GlaThiDa's glacier-wide thickness estimations, two
-approximations which should be better handled in the future.
+With :math:`A_0` the standard creep parameter (:math:`2.4^{-24}`). Currently,
+there is no "optimum" :math:`f_{inv}` parameter in the model. There is a high
+uncertainty in the "true" :math:`A` parameter as well as in all other processes
+affecting the ice thickness. Therefore, we cannot make any recommendation for
+the "best" parameter. Global sensitivity analyses show that the default value
+is a good compromise (`Maussion et al., 2018 <https://www.geosci-model-dev-discuss.net/gmd-2018-9/>`_)
 
-.. _GlaThiDa: http://www.gtn-g.ch/data_catalogue_glathida/
-
+*Note*: for `ITMIX <https://www.the-cryosphere.net/11/949/2017/>`_, :math:`f_{inv}`
+was set to a value of approximately 3 (which was too high and underestimated
+ice thickness in most cases with the exception of the European Alps).
 
 Distributed ice thickness
 -------------------------
 
+To obtain a 2D map of the glacier bed, the flowline thicknesses need to be
+interpolated to the glacier mask. The current implementation of this
+step in OGGM is currently very simple, but provides nice looking maps:
 
 
-References
-----------
+.. ipython:: python
 
-.. [Cuffey_Paterson_2010] Cuffey, K., and W. S. B. Paterson (2010).
-    The Physics of Glaciers, Butterworth‐Heinemann, Oxford, U.K.
-
-.. [Farinotti_etal_2009] Farinotti, D., Huss, M., Bauder, A., Funk, M., &
-    Truffer, M. (2009). A method to estimate the ice volume and
-    ice-thickness distribution of alpine glaciers. Journal of Glaciology, 55
-    (191), 422–430.
-
-.. [Golledge_Levy_2011] Golledge, N. R., and Levy, R. H. (2011).
-    Geometry and dynamics of an East Antarctic Ice Sheet outlet glacier, under
-    past and present climates. Journal of Geophysical Research:
-    Earth Surface, 116(3), 1–13.
-
-.. [Jarosch_etal_2013] Jarosch, a. H., Schoof, C. G., & Anslow, F. S. (2013).
-    Restoring mass conservation to shallow ice flow models over complex
-    terrain. Cryosphere, 7(1), 229–240. http://doi.org/10.5194/tc-7-229-2013
-
-.. [Oerlemans_1997] Oerlemans, J. (1997).
-    A flowline model for Nigardsbreen, Norway:
-    projection of future glacier length based on dynamic calibration with the
-    historic record. Journal of Glaciology, 24, 382–389.
+    tasks.catchment_area(gdir)
+    @savefig plot_distributed_thickness.png width=80%
+    graphics.plot_distributed_thickness(gdir)
